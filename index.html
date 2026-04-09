@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prediction Pool</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #0f0f0f; --surface: #181818; --surface2: #222222;
+    --border: #2e2e2e; --border2: #3a3a3a; --text: #f0ede8;
+    --text2: #888; --text3: #555; --accent: #c8f060;
+    --accent-dim: #8aaa30; --accent-bg: rgba(200,240,96,0.08);
+    --red: #f06060; --red-bg: rgba(240,96,96,0.08);
+    --amber: #f0b840; --amber-bg: rgba(240,184,64,0.08);
+    --blue: #60a8f0; --blue-bg: rgba(96,168,240,0.08);
+    --radius: 10px; --radius-sm: 6px;
+    --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; min-height: 100vh; }
+  .page { display: none; } .page.active { display: block; }
+  .center-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; width: 100%; max-width: 420px; }
+  .app-layout { max-width: 700px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  .mono { font-family: var(--mono); } .muted { color: var(--text2); } .small { font-size: 0.8rem; }
+  .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); font-weight: 500; }
+  .logo { font-family: var(--mono); font-size: 1.1rem; color: var(--accent); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 8px; }
+  .logo-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+  .tab { padding: 10px 18px; font-size: 0.875rem; cursor: pointer; color: var(--text2); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: var(--sans); transition: color 0.15s; }
+  .tab:hover { color: var(--text); } .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .field { margin-bottom: 1rem; }
+  .field label { display: block; font-size: 0.8rem; color: var(--text2); margin-bottom: 5px; font-weight: 500; }
+  input[type=text],input[type=password],input[type=number],input[type=datetime-local],textarea,select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-family: var(--sans); font-size: 0.9rem; padding: 9px 12px; outline: none; transition: border 0.15s;
+  }
+  input:focus,textarea:focus { border-color: var(--border2); } textarea { resize: vertical; min-height: 72px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius-sm); font-size: 0.875rem; font-family: var(--sans); font-weight: 500; cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s; }
+  .btn:active { transform: scale(0.98); } .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-accent { background: var(--accent); color: #0f0f0f; } .btn-accent:hover:not(:disabled) { opacity: 0.9; }
+  .btn-ghost { background: none; border: 1px solid var(--border2); color: var(--text); } .btn-ghost:hover:not(:disabled) { background: var(--surface2); }
+  .btn-danger { background: none; border: 1px solid var(--red); color: var(--red); } .btn-danger:hover:not(:disabled) { background: var(--red-bg); }
+  .btn-warn { background: none; border: 1px solid var(--amber); color: var(--amber); } .btn-warn:hover:not(:disabled) { background: var(--amber-bg); }
+  .btn-sm { padding: 5px 12px; font-size: 0.8rem; } .btn-full { width: 100%; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 12px; }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .card-title { font-size: 0.975rem; font-weight: 500; line-height: 1.4; flex: 1; }
+  .badge { display: inline-flex; align-items: center; font-size: 0.7rem; font-family: var(--mono); padding: 3px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+  .badge-open     { background: rgba(200,240,96,0.12); color: var(--accent); border: 1px solid rgba(200,240,96,0.2); }
+  .badge-locked   { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(240,184,64,0.2); }
+  .badge-resolved { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+  .badge-admin    { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(96,168,240,0.2); }
+  .badge-refund   { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(240,184,64,0.2); }
+  .alert { padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; margin: 8px 0; }
+  .alert-success { background: rgba(200,240,96,0.08); border: 1px solid rgba(200,240,96,0.2); color: var(--accent); }
+  .alert-danger  { background: var(--red-bg); border: 1px solid rgba(240,96,96,0.2); color: var(--red); }
+  .alert-info    { background: var(--blue-bg); border: 1px solid rgba(96,168,240,0.2); color: var(--blue); }
+  .alert-warn    { background: var(--amber-bg); border: 1px solid rgba(240,184,64,0.2); color: var(--amber); }
+  .pool-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--surface2); gap: 2px; margin: 10px 0 3px; }
+  .pool-seg { height: 100%; transition: width 0.4s; }
+  .countdown { font-family: var(--mono); font-size: 0.8rem; color: var(--amber); }
+  .countdown.urgent { color: var(--red); }
+  .choice-block { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px; }
+  .choice-block.winner { border-color: rgba(200,240,96,0.3); background: rgba(200,240,96,0.05); }
+  .choice-block.loser  { opacity: 0.5; }
+  .choice-block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .player-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; padding: 3px 0; border-top: 1px solid var(--border); }
+  .player-name { color: var(--text2); } .player-pcts { font-family: var(--mono); color: var(--text); display: flex; gap: 10px; }
+  .dim { color: var(--text3); }
+  .choice-edit-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .choice-edit-row:last-child { border-bottom: none; }
+  .choice-edit-label { flex: 1; font-size: 0.9rem; } .choice-edit-input { width: 80px; }
+  .my-bet-tag { font-size: 0.72rem; font-family: var(--mono); color: var(--accent-dim); background: var(--accent-bg); padding: 2px 6px; border-radius: 4px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 10; }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar-poolname { font-family: var(--mono); font-size: 0.85rem; color: var(--accent); }
+  .topbar-tokens { font-family: var(--mono); font-size: 1rem; }
+  .rt-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  .rt-dot.off { background: var(--text3); animation: none; }
+  .section-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); font-weight: 500; margin: 1.5rem 0 0.75rem; }
+  .section-label:first-child { margin-top: 0; }
+  .invite-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .invite-code { font-family: var(--mono); font-size: 0.85rem; background: var(--surface2); padding: 4px 10px; border-radius: var(--radius-sm); letter-spacing: 0.05em; }
+  .player-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .player-item:last-child { border-bottom: none; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 0.75rem; color: var(--accent); flex-shrink: 0; }
+  .player-meta { flex: 1; } .player-username { font-size: 0.9rem; font-weight: 500; }
+  .player-tokens { font-size: 0.78rem; font-family: var(--mono); color: var(--text2); }
+  .audit-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-time { font-family: var(--mono); color: var(--text3); min-width: 110px; flex-shrink: 0; }
+  .audit-msg { color: var(--text2); line-height: 1.5; } .audit-msg b { color: var(--text); font-weight: 500; }
+  .report-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .report-table th { text-align: left; color: var(--text3); font-weight: 500; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .report-table td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--border); }
+  .report-table tr:last-child td { border-bottom: none; }
+  .pos { color: var(--accent); } .neg { color: var(--red); } .ref { color: var(--amber); }
+  .resolution-comment { font-size: 0.82rem; color: var(--text2); font-style: italic; border-left: 2px solid var(--border2); padding-left: 10px; margin-top: 8px; }
+  .empty { text-align: center; padding: 3rem 0; color: var(--text3); font-size: 0.875rem; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+  .flex-center  { display: flex; align-items: center; gap: 8px; }
+  .mt-sm { margin-top: 8px; } .mt { margin-top: 1rem; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading-screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 100; }
+  @media (max-width: 500px) { .topbar { padding: 0.75rem 1rem; } .app-layout { padding: 1rem 0.75rem 4rem; } .panel { padding: 1.5rem; } .player-pcts { gap: 6px; } }
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="logo"><div class="logo-dot"></div>prediction pool</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="page" id="page-welcome">
+  <div class="center-wrap">
+    <div class="panel">
+      <div class="logo"><div class="logo-dot"></div>prediction pool</div>
+      <div class="tabs" id="auth-tabs">
+        <button class="tab active" onclick="showAuthTab('login')">Sign in</button>
+        <button class="tab" onclick="showAuthTab('register')">Join pool</button>
+        <button class="tab" onclick="showAuthTab('create')">New pool</button>
+      </div>
+      <div id="authtab-login">
+        <div class="field"><label>Username</label><input id="li-user" type="text" placeholder="your username" autocomplete="username"/></div>
+        <div class="field"><label>Password</label><input id="li-pass" type="password" placeholder="password" autocomplete="current-password"/></div>
+        <button class="btn btn-accent btn-full" id="li-btn" onclick="doLogin()">Sign in</button>
+        <div id="li-err"></div>
+      </div>
+      <div id="authtab-register" style="display:none">
+        <div id="invite-alert" style="display:none" class="alert alert-info">Invite code pre-filled from your link.</div>
+        <div class="field"><label>Invite code</label><input id="reg-code" type="text" placeholder="e.g. ABC123" autocomplete="off"/></div>
+        <div class="field"><label>Username</label><input id="reg-user" type="text" placeholder="choose a username" autocomplete="username"/></div>
+        <div class="field"><label>Password</label><input id="reg-pass" type="password" placeholder="choose a password" autocomplete="new-password"/></div>
+        <button class="btn btn-accent btn-full" id="reg-btn" onclick="doRegister()">Create account</button>
+        <div id="reg-err"></div>
+      </div>
+      <div id="authtab-create" style="display:none">
+        <p class="muted small" style="margin-bottom:1rem">You'll be the founding admin. Others join via invite links.</p>
+        <div class="field"><label>Pool name</label><input id="cp-name" type="text" placeholder="e.g. Office Picks 2026"/></div>
+        <div class="field"><label>Your username</label><input id="cp-user" type="text" placeholder="admin username" autocomplete="username"/></div>
+        <div class="field"><label>Password</label><input id="cp-pass" type="password" placeholder="password" autocomplete="new-password"/></div>
+        <button class="btn btn-accent btn-full" id="cp-btn" onclick="doCreatePool()">Create pool</button>
+        <div id="cp-err"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo" style="margin:0"><div class="logo-dot"></div><span class="topbar-poolname" id="topbar-poolname"></span></div>
+      <div class="flex-center">
+        <span style="font-size:0.85rem;color:var(--text2)" id="topbar-user"></span>
+        <span id="topbar-admin-badge" class="badge badge-admin" style="display:none">admin</span>
+        <span id="rt-dot" class="rt-dot off" title="Connecting..."></span>
+      </div>
+    </div>
+    <div class="flex-center">
+      <span class="label">tokens</span>
+      <span class="topbar-tokens" id="topbar-tokens">100.00</span>
+      <button class="btn btn-ghost btn-sm" onclick="doLogout()">sign out</button>
+    </div>
+  </div>
+  <div class="app-layout">
+    <div class="tabs" id="main-tabs">
+      <button class="tab active" onclick="switchTab('questions')">Questions</button>
+      <button class="tab" onclick="switchTab('mybets')">My bets</button>
+      <button class="tab" id="tab-btn-admin" style="display:none" onclick="switchTab('admin')">Admin</button>
+    </div>
+    <div id="tab-questions"></div>
+    <div id="tab-mybets"  style="display:none"></div>
+    <div id="tab-admin"   style="display:none"></div>
+  </div>
+</div>
+
+<script>
+// ─── Supabase client ───────────────────────────────
+const sb = supabase.createClient(
+  'https://zjfbekvcayiqntotjcyn.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqZmJla3ZjYXlpcW50b3RqY3luIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTU2MjgsImV4cCI6MjA5MTI3MTYyOH0.SdXeIiRW7noz6Mvx9LkpUU7SYZgW99_5_4PC99Cqth8'
+);
+
+// ─── Session (userId stored in localStorage only) ──
+let S = { userId:null, username:null, isAdmin:false, poolName:'' };
+const SK = 'pp_sess';
+const saveSession = d => localStorage.setItem(SK, JSON.stringify(d));
+const loadSession = () => { try { return JSON.parse(localStorage.getItem(SK)); } catch { return null; } };
+const clearSession = () => localStorage.removeItem(SK);
+
+// ─── Utils ────────────────────────────────────────
+const uid    = () => Math.random().toString(36).slice(2,9);
+const fmtNum = n  => (Math.round(n*100)/100).toFixed(2);
+const fmtTs  = t  => { const d=new Date(t); return d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); };
+const esc    = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const eA     = s  => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+const initials=s  => s.slice(0,2).toUpperCase();
+const val    = id => document.getElementById(id)?.value||'';
+
+function hashPass(p) {
+  let h=5381; for(let i=0;i<p.length;i++) h=((h<<5)+h)^p.charCodeAt(i); return (h>>>0).toString(36);
+}
+
+function poolStats(bets, choices) {
+  const totals = {}; choices.forEach(c=>{totals[c]=0;});
+  bets.forEach(b=>{ totals[b.choice]=(totals[b.choice]||0)+Number(b.amount); });
+  const grand = Object.values(totals).reduce((a,b)=>a+b,0);
+  return {totals, grand};
+}
+
+function showErr(id, msg, type='danger') {
+  const el=document.getElementById(id); if(!el) return;
+  el.innerHTML=`<div class="alert alert-${type} mt-sm">${msg}</div>`;
+  if(type==='success') setTimeout(()=>{ if(el) el.innerHTML=''; },3000);
+}
+
+function setBusy(id, busy, label) {
+  const b=document.getElementById(id); if(!b) return;
+  if(!b.dataset.orig) b.dataset.orig=b.textContent;
+  b.disabled=busy;
+  b.innerHTML=busy?'<span class="spinner"></span>':(label||b.dataset.orig);
+}
+
+const SEG = ['#c8f060','#60a8f0','#f0b840','#f060a8','#60f0d8','#f07860'];
+
+// ─── DB helpers ───────────────────────────────────
+async function q(table, filters={}) {
+  let r=sb.from(table).select('*');
+  Object.entries(filters).forEach(([k,v])=>{ r=r.eq(k,v); });
+  const {data,error}=await r; if(error) throw error; return data||[];
+}
+async function q1(table, filters={}) { const r=await q(table,filters); return r[0]||null; }
+async function ins(table, row) {
+  const {data,error}=await sb.from(table).insert(row).select(); if(error) throw error; return data[0];
+}
+async function upd(table, filters, updates) {
+  let r=sb.from(table).update(updates);
+  Object.entries(filters).forEach(([k,v])=>{ r=r.eq(k,v); });
+  const {error}=await r; if(error) throw error;
+}
+async function del(table, col, val2) {
+  // Delete all rows — uses neq with impossible value to match all, or uses a real filter
+  const {error}=await sb.from(table).delete().neq(col, '__NOMATCH__9999__');
+  if(error) throw error;
+}
+
+async function audit(type, payload) {
+  try { await ins('audit_log',{id:uid(),admin_id:S.userId,admin_name:S.username,type,payload}); } catch{}
+}
+async function auditAs(adminId, adminName, type, payload) {
+  try { await ins('audit_log',{id:uid(),admin_id:adminId,admin_name:adminName,type,payload}); } catch{}
+}
+
+// ─── Page / tab routing ───────────────────────────
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+}
+function showAuthTab(t) {
+  const names=['login','register','create'];
+  document.querySelectorAll('#auth-tabs .tab').forEach((el,i)=>el.classList.toggle('active',names[i]===t));
+  names.forEach(n=>{ document.getElementById('authtab-'+n).style.display=n===t?'':'none'; });
+}
+
+let currentTab='questions';
+function switchTab(t) {
+  currentTab=t;
+  const order=['questions','mybets','admin'];
+  document.querySelectorAll('#main-tabs .tab').forEach((el,i)=>el.classList.toggle('active',order[i]===t));
+  order.forEach(n=>{ document.getElementById('tab-'+n).style.display=n===t?'':'none'; });
+  if(t==='questions') renderQuestions();
+  if(t==='mybets')    renderMyBets();
+  if(t==='admin')     renderAdmin();
+}
+
+// ─── Invite hash ──────────────────────────────────
+function checkInviteHash() {
+  const m=window.location.hash.match(/[#&]invite=([A-Z0-9]+)/i);
+  if(m) {
+    showAuthTab('register');
+    const inp=document.getElementById('reg-code'); if(inp) inp.value=m[1].toUpperCase();
+    const al=document.getElementById('invite-alert'); if(al) al.style.display='';
+    history.replaceState(null,'',window.location.pathname);
+  }
+}
+
+// ─── Auth ─────────────────────────────────────────
+async function doCreatePool() {
+  const name=val('cp-name').trim(), user=val('cp-user').trim().toLowerCase(), pass=val('cp-pass');
+  if(!name||!user||!pass) { showErr('cp-err','Please fill all fields.'); return; }
+  if(user.length<2)       { showErr('cp-err','Username must be at least 2 characters.'); return; }
+  setBusy('cp-btn',true);
+  try {
+    const meta=await q1('pool_meta',{});
+    if(meta) { showErr('cp-err','A pool already exists. Ask for an invite link.'); return; }
+    const ex=await sb.from('users').select('id').eq('username',user);
+    if(ex.data?.length) { showErr('cp-err','Username taken.'); return; }
+    const newId=uid();
+    await ins('pool_meta',{id:'main',name});
+    await ins('users',{id:newId,username:user,pass_hash:hashPass(pass),is_admin:true,tokens:100});
+    await auditAs(newId,user,'pool_created',{name});
+    S={userId:newId,username:user,isAdmin:true,poolName:name};
+    saveSession({userId:newId}); await enterApp();
+  } catch(e) { showErr('cp-err','Error: '+e.message); }
+  finally { setBusy('cp-btn',false); }
+}
+
+async function doRegister() {
+  const code=val('reg-code').trim().toUpperCase(), user=val('reg-user').trim().toLowerCase(), pass=val('reg-pass');
+  if(!code||!user||!pass) { showErr('reg-err','Please fill all fields.'); return; }
+  if(user.length<2)       { showErr('reg-err','Username must be at least 2 characters.'); return; }
+  setBusy('reg-btn',true);
+  try {
+    const meta=await q1('pool_meta',{}); if(!meta) { showErr('reg-err','No pool found.'); return; }
+    const inv=await q1('invites',{code,used:false}); if(!inv) { showErr('reg-err','Invalid or used invite code.'); return; }
+    const ex=await sb.from('users').select('id').eq('username',user); if(ex.data?.length) { showErr('reg-err','Username taken.'); return; }
+    await upd('invites',{code},{used:true,used_by:user,used_at:new Date().toISOString()});
+    const newId=uid();
+    await ins('users',{id:newId,username:user,pass_hash:hashPass(pass),is_admin:false,tokens:100});
+    await auditAs(newId,user,'user_joined',{username:user});
+    S={userId:newId,username:user,isAdmin:false,poolName:meta.name};
+    saveSession({userId:newId}); await enterApp();
+  } catch(e) { showErr('reg-err','Error: '+e.message); }
+  finally { setBusy('reg-btn',false); }
+}
+
+async function doLogin() {
+  const user=val('li-user').trim().toLowerCase(), pass=val('li-pass');
+  if(!user||!pass) { showErr('li-err','Please fill all fields.'); return; }
+  setBusy('li-btn',true);
+  try {
+    const meta=await q1('pool_meta',{}); if(!meta) { showErr('li-err','No pool found.'); return; }
+    const {data:rows}=await sb.from('users').select('*').eq('username',user).eq('pass_hash',hashPass(pass));
+    if(!rows?.length) { showErr('li-err','Incorrect username or password.'); return; }
+    const u=rows[0];
+    S={userId:u.id,username:u.username,isAdmin:u.is_admin,poolName:meta.name};
+    saveSession({userId:u.id}); await enterApp();
+  } catch(e) { showErr('li-err','Error: '+e.message); }
+  finally { setBusy('li-btn',false); }
+}
+
+async function doLogout() {
+  clearSession(); rtChannel?.unsubscribe();
+  S={userId:null,username:null,isAdmin:false,poolName:''};
+  showPage('page-welcome'); showAuthTab('login');
+}
+
+// ─── App entry ────────────────────────────────────
+async function enterApp() {
+  document.getElementById('topbar-poolname').textContent=S.poolName;
+  document.getElementById('topbar-user').textContent=S.username;
+  document.getElementById('topbar-admin-badge').style.display=S.isAdmin?'':'none';
+  document.getElementById('tab-btn-admin').style.display=S.isAdmin?'':'none';
+  showPage('page-app');
+  await refreshTokens();
+  switchTab('questions');
+  startTick();
+  subscribeRT();
+}
+
+async function refreshTokens() {
+  try {
+    const u=await q1('users',{id:S.userId});
+    if(u) {
+      S.isAdmin=u.is_admin;
+      document.getElementById('topbar-tokens').textContent=fmtNum(u.tokens);
+      document.getElementById('topbar-admin-badge').style.display=u.is_admin?'':'none';
+      document.getElementById('tab-btn-admin').style.display=u.is_admin?'':'none';
+    }
+  } catch{}
+}
+
+// ─── Realtime ─────────────────────────────────────
+let rtChannel=null;
+function subscribeRT() {
+  const dot=document.getElementById('rt-dot');
+  rtChannel=sb.channel('pp-all')
+    .on('postgres_changes',{event:'*',schema:'public'},async payload=>{
+      if(payload.table==='users') await refreshTokens();
+      if(currentTab==='questions') renderQuestions();
+      if(currentTab==='mybets')    renderMyBets();
+      if(currentTab==='admin')     renderAdmin();
+    })
+    .subscribe(s=>{
+      dot.classList.toggle('off', s!=='SUBSCRIBED');
+      dot.title=s==='SUBSCRIBED'?'Live — updates automatically':'Reconnecting...';
+    });
+}
+
+// ─── Countdown tick ───────────────────────────────
+function startTick() {
+  setInterval(async()=>{
+    document.querySelectorAll('[data-cd]').forEach(el=>{
+      const d=parseInt(el.dataset.cd), diff=d-Date.now();
+      el.textContent=formatCD(d);
+      el.className='countdown'+(diff<60000?' urgent':'');
+    });
+    if(!S.isAdmin) return;
+    try {
+      const now=new Date().toISOString();
+      const {data:tolock}=await sb.from('questions').select('*').eq('locked',false).eq('resolved',false).lt('lock_deadline',now).not('lock_deadline','is',null);
+      for(const q2 of (tolock||[])) {
+        await upd('questions',{id:q2.id},{locked:true,locked_at:now});
+        await audit('bets_locked',{question:q2.text,auto:true});
+      }
+    } catch{}
+  },1000);
+}
+
+function formatCD(deadline) {
+  const diff=deadline-Date.now(); if(diff<=0) return 'locked';
+  const h=Math.floor(diff/3600000), m=Math.floor((diff%3600000)/60000), s=Math.floor((diff%60000)/1000);
+  if(h>0) return `${h}h ${m}m`; if(m>0) return `${m}m ${s}s`; return `${s}s`;
+}
+
+// ─── Questions tab ────────────────────────────────
+async function renderQuestions() {
+  const el=document.getElementById('tab-questions');
+  try {
+    const [qs,bets,users]=await Promise.all([q('questions'),q('bets'),q('users')]);
+    const umap={}; users.forEach(u=>{ umap[u.id]=u; });
+    if(!qs.length) { el.innerHTML=`<div class="empty">${S.isAdmin?'Post the first question in the Admin tab.':'No questions yet — check back soon.'}</div>`; return; }
+    qs.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    const open=qs.filter(x=>!x.resolved&&!x.locked), locked=qs.filter(x=>!x.resolved&&x.locked), resolved=qs.filter(x=>x.resolved);
+    let html='';
+    if(open.length)     { html+=`<div class="section-label">Open — bets can be adjusted</div>`;   open.forEach(x=>{html+=buildQCard(x,bets,umap);}); }
+    if(locked.length)   { html+=`<div class="section-label">Locked — awaiting resolution</div>`;  locked.forEach(x=>{html+=buildQCard(x,bets,umap);}); }
+    if(resolved.length) { html+=`<div class="section-label">Resolved</div>`;                      resolved.forEach(x=>{html+=buildQCard(x,bets,umap);}); }
+    el.innerHTML=html;
+  } catch(e) { el.innerHTML=`<div class="alert alert-danger">Load error: ${e.message}</div>`; }
+}
+
+function buildQCard(question, allBets, umap) {
+  const qb=allBets.filter(b=>b.question_id===question.id);
+  const {totals,grand}=poolStats(qb,question.choices);
+  const myBets={}; qb.filter(b=>b.user_id===S.userId).forEach(b=>{myBets[b.choice]=Number(b.amount);});
+  const betterCount={}; question.choices.forEach(c=>{betterCount[c]=qb.filter(b=>b.choice===c).length;});
+  const totalBetters=Object.values(betterCount).reduce((a,b)=>a+b,0);
+  const deadline=question.lock_deadline?new Date(question.lock_deadline).getTime():null;
+  const statusBadge=question.resolved?'badge-resolved':question.locked?'badge-locked':'badge-open';
+  const statusText=question.resolved?'resolved':question.locked?'locked':'open';
+
+  let html=`<div class="card"><div class="card-header">
+    <span class="card-title">${esc(question.text)}</span>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+      <span class="badge ${statusBadge}">${statusText}</span>
+      ${deadline&&!question.locked&&!question.resolved?`<span class="countdown" data-cd="${deadline}">${formatCD(deadline)}</span>`:''}
+    </div>
+  </div>`;
+
+  if(question.resolved||question.locked) {
+    html+=renderAlloc(question,qb,question.choices,totals,grand,umap);
+    if(question.resolved) {
+      if(question.refunded) html+=`<div class="alert alert-warn mt-sm">This question was refunded — all bets returned.</div>`;
+      else if(myBets[question.winner]) {
+        const wt=totals[question.winner],lt=grand-wt, earn=wt>0?lt*(myBets[question.winner]/wt):0;
+        html+=`<div class="alert alert-success mt-sm">You won <b>+${fmtNum(earn)}</b> tokens on "${esc(question.winner)}"</div>`;
+      } else if(Object.keys(myBets).length) {
+        html+=`<div class="alert alert-danger mt-sm">You lost — winner was "${esc(question.winner)}"</div>`;
+      }
+      if(question.resolution_comment) html+=`<div class="resolution-comment">"${esc(question.resolution_comment)}"</div>`;
+    }
+  } else {
+    html+=`<div style="font-size:0.8rem;color:var(--text3);margin-bottom:10px;font-family:var(--mono)">${totalBetters} player${totalBetters!==1?'s':''} betting</div>`;
+    question.choices.forEach((c,i)=>{
+      const myAmt=myBets[c]||0;
+      html+=`<div class="choice-edit-row">
+        <span class="choice-edit-label">${esc(c)}</span>
+        ${myAmt>0?`<span class="my-bet-tag">${fmtNum(myAmt)}t</span>`:''}
+        <span style="font-size:0.78rem;color:var(--text3);min-width:60px;text-align:right;font-family:var(--mono)">${betterCount[c]} player${betterCount[c]!==1?'s':''}</span>
+        ${!S.isAdmin?`<input type="number" min="0" step="0.01" value="${fmtNum(myAmt)}" id="ba-${question.id}-${i}" class="choice-edit-input"/>
+        <button class="btn btn-ghost btn-sm" onclick="setBet('${eA(question.id)}','${eA(c)}',${i})">Set</button>`:''}
+      </div>`;
+    });
+    if(!S.isAdmin) html+=`<div class="small muted mt-sm">Set to 0 to remove a bet. Min: 0.01.</div>`;
+  }
+  return html+`</div>`;
+}
+
+function renderAlloc(question, qb, choices, totals, grand, umap) {
+  let html='';
+  if(grand>0) {
+    html+=`<div class="pool-bar">`;
+    choices.forEach((c,i)=>{ const pct=grand>0?(totals[c]/grand*100):0; html+=`<div class="pool-seg" style="width:${pct.toFixed(1)}%;background:${SEG[i%SEG.length]}"></div>`; });
+    html+=`</div><div style="font-size:0.75rem;color:var(--text2);font-family:var(--mono);margin-bottom:10px">Total pool: ${fmtNum(grand)} tokens</div>`;
+  }
+  choices.forEach((c,i)=>{
+    const side=qb.filter(b=>b.choice===c), sideTotal=totals[c], color=SEG[i%SEG.length];
+    const isRes=question.resolved; let cls='choice-block'; if(isRes) cls+=c===question.winner?' winner':' loser';
+    html+=`<div class="${cls}"><div class="choice-block-header">
+      <span style="font-weight:500;font-size:0.9rem;color:${isRes&&c===question.winner?'var(--accent)':'var(--text)'}">${esc(c)}${isRes&&c===question.winner?' ✓':''}</span>
+      <span style="font-family:var(--mono);font-size:0.8rem;color:${color}">${fmtNum(sideTotal)}t · ${grand>0?(sideTotal/grand*100).toFixed(1):0}% of pool</span>
+    </div>`;
+    if(side.length) {
+      side.forEach(b=>{
+        const uname=umap[b.user_id]?.username||b.user_id;
+        const pctSide=sideTotal>0?(b.amount/sideTotal*100).toFixed(1):0;
+        const pctPool=grand>0?(b.amount/grand*100).toFixed(1):0;
+        html+=`<div class="player-row"><span class="player-name">${esc(uname)}</span>
+          <div class="player-pcts"><span>${fmtNum(b.amount)}t</span><span>${pctSide}% <span class="dim">of side</span></span><span class="dim">${pctPool}% pool</span></div>
+        </div>`;
+      });
+    } else html+=`<div class="small muted" style="padding-top:6px">No bets.</div>`;
+    html+=`</div>`;
+  });
+  return html;
+}
+
+// ─── Bet setting ──────────────────────────────────
+async function setBet(qId, choice, idx) {
+  const newAmt=parseFloat(document.getElementById(`ba-${qId}-${idx}`)?.value||0);
+  if(isNaN(newAmt)||newAmt<0)   { alert('Enter a valid amount (0 to remove).'); return; }
+  if(newAmt>0&&newAmt<0.01)     { alert('Minimum bet is 0.01 tokens.'); return; }
+  const btn=document.querySelector(`button[onclick="setBet('${eA(qId)}','${eA(choice)}',${idx})"]`);
+  if(btn) { btn.disabled=true; btn.innerHTML='<span class="spinner"></span>'; }
+  try {
+    const [question,me,exBet]=await Promise.all([
+      q1('questions',{id:qId}),
+      q1('users',{id:S.userId}),
+      sb.from('bets').select('*').eq('question_id',qId).eq('choice',choice).eq('user_id',S.userId).then(r=>r.data?.[0]||null)
+    ]);
+    if(!question||question.resolved||question.locked) { alert('This question is no longer open.'); return; }
+    const oldAmt=exBet?Number(exBet.amount):0, diff=newAmt-oldAmt;
+    if(diff>Number(me.tokens)+0.001) { alert(`Not enough tokens. You have ${fmtNum(me.tokens)}.`); return; }
+    const newTokens=Math.round((Number(me.tokens)-diff)*100)/100;
+    if(newAmt===0) {
+      await sb.from('bets').delete().eq('question_id',qId).eq('choice',choice).eq('user_id',S.userId);
+    } else {
+      await sb.from('bets').upsert(
+        {id:exBet?.id||uid(),question_id:qId,choice,user_id:S.userId,amount:Math.round(newAmt*100)/100},
+        {onConflict:'question_id,choice,user_id'}
+      );
+    }
+    await upd('users',{id:S.userId},{tokens:newTokens});
+    await refreshTokens();
+  } catch(e) { alert('Error: '+e.message); }
+  finally { if(btn) { btn.disabled=false; btn.textContent='Set'; } }
+}
+
+// ─── My bets tab ──────────────────────────────────
+async function renderMyBets() {
+  const el=document.getElementById('tab-mybets');
+  try {
+    const [qs,myBets,me]=await Promise.all([
+      q('questions'),
+      sb.from('bets').select('*').eq('user_id',S.userId).then(r=>r.data||[]),
+      q1('users',{id:S.userId})
+    ]);
+    const qmap={}; qs.forEach(x=>{qmap[x.id]=x;});
+    const myQIds=[...new Set(myBets.map(b=>b.question_id))];
+    let allForMyQs=[];
+    if(myQIds.length) { const {data}=await sb.from('bets').select('*').in('question_id',myQIds); allForMyQs=data||[]; }
+
+    let html=`<div style="display:flex;gap:10px;margin-bottom:1.5rem">
+      <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem">
+        <div class="label">tokens</div><div style="font-size:1.5rem;font-family:var(--mono);margin-top:4px">${fmtNum(me.tokens)}</div>
+      </div>
+      <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem">
+        <div class="label">active bets</div><div style="font-size:1.5rem;font-family:var(--mono);margin-top:4px">${myBets.filter(b=>!qmap[b.question_id]?.resolved).length}</div>
+      </div>
+    </div>`;
+
+    if(!myBets.length) { html+=`<div class="empty">No bets placed yet.</div>`; el.innerHTML=html; return; }
+
+    const rows=myBets.map(b=>{
+      const question=qmap[b.question_id]; if(!question) return null;
+      const {totals,grand}=poolStats(allForMyQs.filter(x=>x.question_id===question.id),question.choices);
+      let result=null;
+      if(question.resolved) {
+        if(question.refunded) result={refund:true,amt:Number(b.amount)};
+        else if(b.choice===question.winner) { const wt=totals[question.winner],lt=grand-wt; result={win:true,earn:wt>0?lt*(Number(b.amount)/wt):0}; }
+        else result={win:false};
+      }
+      return {question,bet:b,result};
+    }).filter(Boolean).sort((a,b)=>new Date(b.question.created_at)-new Date(a.question.created_at));
+
+    const open=rows.filter(r=>!r.question.locked&&!r.question.resolved);
+    const locked=rows.filter(r=>r.question.locked&&!r.question.resolved);
+    const resolved=rows.filter(r=>r.question.resolved);
+
+    const betCard=r=>{
+      const sc=r.question.resolved?'var(--text3)':r.question.locked?'var(--amber)':'var(--accent)';
+      const st=r.question.resolved?'resolved':r.question.locked?'locked':'open';
+      const dl=r.question.lock_deadline?new Date(r.question.lock_deadline).getTime():null;
+      let res='';
+      if(r.result) {
+        if(r.result.refund) res=`<div class="alert alert-warn mt-sm">Refunded — ${fmtNum(r.result.amt)} tokens returned</div>`;
+        else if(r.result.win) res=`<div class="alert alert-success mt-sm">Won +${fmtNum(r.result.earn)} tokens</div>`;
+        else res=`<div class="alert alert-danger mt-sm">Lost — winner was "${esc(r.question.winner)}"</div>`;
+      }
+      return `<div class="card"><div class="flex-between" style="margin-bottom:6px">
+        <span style="font-size:0.9rem;font-weight:500">${esc(r.question.text)}</span>
+        <span class="small mono" style="color:${sc}">${st}</span>
+      </div>
+      <div class="small muted">Bet <b style="color:var(--text);font-family:var(--mono)">${fmtNum(r.bet.amount)}t</b> on <b style="color:var(--text)">${esc(r.bet.choice)}</b>${dl&&!r.question.locked?` · <span class="countdown" data-cd="${dl}">${formatCD(dl)}</span>`:''}</div>
+      ${res}</div>`;
+    };
+
+    if(open.length)     { html+=`<div class="section-label">Editable</div>`;  open.forEach(r=>html+=betCard(r)); }
+    if(locked.length)   { html+=`<div class="section-label">Locked</div>`;    locked.forEach(r=>html+=betCard(r)); }
+    if(resolved.length) { html+=`<div class="section-label">Resolved</div>`;  resolved.forEach(r=>html+=betCard(r)); }
+    el.innerHTML=html;
+  } catch(e) { el.innerHTML=`<div class="alert alert-danger">Load error: ${e.message}</div>`; }
+}
+
+// ─── Admin tab ────────────────────────────────────
+async function renderAdmin() {
+  const el=document.getElementById('tab-admin');
+  try {
+    const [users,qs,allBets,invites,auditLog,reports]=await Promise.all([
+      q('users'),q('questions'),q('bets'),q('invites'),
+      sb.from('audit_log').select('*').order('created_at',{ascending:false}).limit(50).then(r=>r.data||[]),
+      sb.from('reports').select('*').order('created_at',{ascending:false}).then(r=>r.data||[])
+    ]);
+    const umap={}; users.forEach(u=>{umap[u.id]=u;});
+    let html='';
+
+    // Post question
+    html+=`<div class="section-label">Post a question</div><div class="card">
+      <div class="field"><label>Question text</label><input id="nq-text" type="text" placeholder="e.g. Will we launch before Friday?"/></div>
+      <div class="field"><label>Answer choices (comma-separated)</label><input id="nq-choices" type="text" placeholder="Yes, No"/></div>
+      <div class="field"><label>Bet deadline — optional (locks bets automatically)</label><input id="nq-deadline" type="datetime-local"/></div>
+      <button class="btn btn-accent btn-sm" id="nq-btn" onclick="adminCreateQ()">Post question</button>
+      <div id="nq-err"></div>
+    </div>`;
+
+    // Open questions
+    const openQs=qs.filter(x=>!x.resolved&&!x.locked);
+    if(openQs.length) {
+      html+=`<div class="section-label">Open questions</div>`;
+      openQs.forEach(question=>{
+        const qb=allBets.filter(b=>b.question_id===question.id);
+        const bc={}; question.choices.forEach(c=>{bc[c]=qb.filter(b=>b.choice===c).length;});
+        const total=Object.values(bc).reduce((a,b)=>a+b,0);
+        const dl=question.lock_deadline?new Date(question.lock_deadline).getTime():null;
+        html+=`<div class="card"><div class="card-header">
+          <span class="card-title">${esc(question.text)}</span>
+          ${dl?`<span class="countdown" data-cd="${dl}">${formatCD(dl)}</span>`:''}
+        </div><div class="small muted" style="margin-bottom:10px">${total} player${total!==1?'s':''} betting</div>`;
+        question.choices.forEach(c=>{
+          html+=`<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span>${esc(c)}</span><span class="mono" style="color:var(--text3)">${bc[c]} player${bc[c]!==1?'s':''}</span>
+          </div>`;
+        });
+        html+=`<div class="btn-row mt-sm"><button class="btn btn-warn btn-sm" onclick="adminLock('${eA(question.id)}')">Lock bets now</button></div></div>`;
+      });
+    }
+
+    // Locked questions
+    const lockedQs=qs.filter(x=>!x.resolved&&x.locked);
+    if(lockedQs.length) {
+      html+=`<div class="section-label">Locked — resolve when ready</div>`;
+      lockedQs.forEach(question=>{
+        const qb=allBets.filter(b=>b.question_id===question.id);
+        const {totals,grand}=poolStats(qb,question.choices);
+        html+=`<div class="card"><div class="card-header"><span class="card-title">${esc(question.text)}</span><span class="badge badge-locked">locked</span></div>
+          <div class="small muted" style="margin-bottom:10px;font-family:var(--mono)">Pool: ${fmtNum(grand)} tokens</div>`;
+        question.choices.forEach((c,i)=>{
+          const side=qb.filter(b=>b.choice===c), sideTotal=totals[c], pct=grand>0?(sideTotal/grand*100).toFixed(1):0;
+          html+=`<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px">
+            <div class="flex-between" style="margin-bottom:4px">
+              <span style="font-weight:500;font-size:0.88rem;color:${SEG[i%SEG.length]}">${esc(c)}</span>
+              <span class="mono small" style="color:var(--text2)">${fmtNum(sideTotal)}t · ${pct}%</span>
+            </div>`;
+          side.forEach(b=>{
+            const pctSide=sideTotal>0?(b.amount/sideTotal*100).toFixed(1):0;
+            html+=`<div class="player-row"><span class="player-name">${esc(umap[b.user_id]?.username||b.user_id)}</span>
+              <div class="player-pcts">${fmtNum(b.amount)}t · ${pctSide}% of side</div>
+            </div>`;
+          });
+          if(!side.length) html+=`<div class="small muted">No bets.</div>`;
+          html+=`</div>`;
+        });
+        html+=`<div class="field mt-sm"><label>Resolution comment (optional — shown to all players)</label>
+          <textarea id="rc-${question.id}" placeholder="e.g. Confirmed via official announcement…" style="min-height:52px"></textarea>
+        </div><div class="btn-row">
+          ${question.choices.map(c=>`<button class="btn btn-accent btn-sm" onclick="adminResolve('${eA(question.id)}','${eA(c)}')">✓ ${esc(c)}</button>`).join('')}
+          <button class="btn btn-warn btn-sm" onclick="adminRefund('${eA(question.id)}')">Refund all</button>
+        </div></div>`;
+      });
+    }
+
+    // Invites
+    html+=`<div class="section-label">Invite codes</div><div class="card">`;
+    const activeInv=invites.filter(i=>!i.used);
+    if(activeInv.length) {
+      activeInv.forEach(inv=>{
+        html+=`<div class="invite-row">
+          <span class="invite-code">${inv.code}</span>
+          <button class="btn btn-ghost btn-sm" onclick="copyLink('${inv.code}')">Copy link</button>
+          <button class="btn btn-danger btn-sm" onclick="revokeInvite('${eA(inv.code)}')">Revoke</button>
+        </div>`;
+      });
+    } else html+=`<div class="small muted" style="margin-bottom:8px">No active codes.</div>`;
+    html+=`<button class="btn btn-ghost btn-sm mt-sm" onclick="genInvite()">Generate code</button><div id="inv-out"></div></div>`;
+
+    // Players
+    html+=`<div class="section-label">Players</div><div class="card">`;
+    users.sort((a,b)=>b.tokens-a.tokens).forEach(u=>{
+      html+=`<div class="player-item"><div class="avatar">${initials(u.username)}</div>
+        <div class="player-meta"><div class="player-username">${esc(u.username)}</div><div class="player-tokens">${fmtNum(u.tokens)} tokens</div></div>
+        ${u.is_admin?'<span class="badge badge-admin">admin</span>':''}
+        ${u.id!==S.userId?`<button class="btn btn-ghost btn-sm" onclick="toggleAdmin('${eA(u.id)}',${!u.is_admin})">${u.is_admin?'Remove admin':'Make admin'}</button>`:'<span class="small muted">(you)</span>'}
+      </div>`;
+    });
+    html+=`</div>`;
+
+    // Reset
+    html+=`<div class="section-label">Danger zone</div><div class="card">
+      <div class="small muted" style="margin-bottom:10px">Wipes all questions, bets, and reports. Resets everyone's tokens. Accounts are kept.</div>
+      <div class="flex-center">
+        <label class="small muted">Token amount:</label>
+        <input type="number" id="reset-tokens" value="100" min="1" style="width:80px"/>
+        <button class="btn btn-danger btn-sm" onclick="adminReset()">Reset pool</button>
+      </div>
+    </div>`;
+
+    // Reports
+    if(reports.length) {
+      html+=`<div class="section-label">Resolution reports</div>`;
+      reports.forEach(rep=>{
+        html+=`<div class="card"><div class="flex-between" style="margin-bottom:6px">
+          <span style="font-weight:500">${esc(rep.question)}</span>
+          <span class="badge ${rep.refunded?'badge-refund':'badge-resolved'}">${rep.refunded?'refunded':'resolved: '+esc(rep.winner||'')}</span>
+        </div><div class="small muted" style="margin-bottom:10px">${fmtTs(rep.created_at)} · Pool: ${fmtNum(rep.total_pool)}t${rep.comment?` · "${esc(rep.comment)}"`:''}</div>
+        <table class="report-table"><thead><tr><th>Player</th><th>Choice</th><th>Bet</th><th>Result</th></tr></thead><tbody>`;
+        (rep.rows||[]).forEach(r=>{
+          const cls=r.delta>0?'pos':r.delta===0?'ref':'neg', sign=r.delta>0?'+':'';
+          html+=`<tr><td>${esc(r.username)}</td><td>${esc(r.choice)}</td><td class="mono">${fmtNum(r.bet)}t</td><td class="mono ${cls}">${sign}${fmtNum(r.delta)}t</td></tr>`;
+        });
+        html+=`</tbody></table></div>`;
+      });
+    }
+
+    // Audit log
+    html+=`<div class="section-label">Audit log</div><div class="card">`;
+    if(!auditLog.length) { html+=`<div class="small muted">No events yet.</div>`; }
+    else {
+      const msgMap={
+        pool_created:      p=>`Pool <b>${esc(p.name)}</b> created`,
+        user_joined:       p=>`<b>${esc(p.username)}</b> joined the pool`,
+        question_posted:   p=>`Question posted: "<b>${esc(p.question)}</b>"`,
+        bets_locked:       p=>`Bets locked on "<b>${esc(p.question)}</b>"${p.auto?' (auto)':''}`,
+        question_resolved: p=>`"<b>${esc(p.question)}</b>" resolved as <b>${esc(p.winner)}</b>${p.comment?` — "${esc(p.comment)}"`: ''}`,
+        question_refunded: p=>`"<b>${esc(p.question)}</b>" refunded — ${fmtNum(p.totalRefunded)}t returned`,
+        admin_changed:     p=>`<b>${esc(p.target)}</b> ${p.granted?'granted':'removed'} admin`,
+        invite_generated:  p=>`Invite code <b>${p.code}</b> generated`,
+        invite_revoked:    p=>`Invite code <b>${p.code}</b> revoked`,
+        pool_reset:        p=>`Pool reset — all players set to <b>${p.tokens}t</b>`,
+      };
+      auditLog.forEach(ev=>{
+        const fn=msgMap[ev.type];
+        html+=`<div class="audit-row"><span class="audit-time">${fmtTs(ev.created_at)}</span>
+          <span class="audit-msg">${fn?fn(ev.payload):ev.type} <span style="color:var(--text3)">by ${esc(ev.admin_name||ev.admin_id)}</span></span>
+        </div>`;
+      });
+    }
+    html+=`</div>`;
+    el.innerHTML=html;
+  } catch(e) { el.innerHTML=`<div class="alert alert-danger">Load error: ${e.message}</div>`; }
+}
+
+// ─── Admin actions ────────────────────────────────
+async function adminCreateQ() {
+  const text=val('nq-text').trim(), raw=val('nq-choices'), dlRaw=val('nq-deadline');
+  const choices=raw.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!text)              { showErr('nq-err','Enter a question.'); return; }
+  if(choices.length<2)   { showErr('nq-err','Enter at least 2 choices.'); return; }
+  const lockDeadline=dlRaw?new Date(dlRaw).toISOString():null;
+  if(lockDeadline&&new Date(lockDeadline)<=new Date()) { showErr('nq-err','Deadline must be in the future.'); return; }
+  setBusy('nq-btn',true);
+  try {
+    await ins('questions',{id:'q'+uid(),text,choices,locked:false,lock_deadline:lockDeadline,resolved:false,refunded:false});
+    await audit('question_posted',{question:text});
+    document.getElementById('nq-text').value=''; document.getElementById('nq-choices').value=''; document.getElementById('nq-deadline').value='';
+    showErr('nq-err','Question posted!','success');
+    renderAdmin();
+  } catch(e) { showErr('nq-err','Error: '+e.message); }
+  finally { setBusy('nq-btn',false); }
+}
+
+async function adminLock(qId) {
+  try {
+    const question=await q1('questions',{id:qId});
+    await upd('questions',{id:qId},{locked:true,locked_at:new Date().toISOString()});
+    await audit('bets_locked',{question:question?.text,auto:false});
+    renderAdmin(); if(currentTab==='questions') renderQuestions();
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+async function adminResolve(qId, winner) {
+  try {
+    const [question,qBets,users2]=await Promise.all([
+      q1('questions',{id:qId}),
+      sb.from('bets').select('*').eq('question_id',qId).then(r=>r.data||[]),
+      q('users')
+    ]);
+    if(!question||question.resolved) return;
+    const comment=(document.getElementById('rc-'+qId)?.value||'').trim();
+    const umap2={}; users2.forEach(u=>{umap2[u.id]=u;});
+    const {totals,grand}=poolStats(qBets,question.choices);
+    const wt=totals[winner]||0, lt=grand-wt;
+    const reportRows=[], tokenUpdates={};
+
+    if(lt===0||wt===0) {
+      // Refund all
+      await upd('questions',{id:qId},{resolved:true,refunded:true,resolution_comment:comment||null});
+      for(const b of qBets) {
+        const prev=Number(umap2[b.user_id]?.tokens||0);
+        tokenUpdates[b.user_id]=(tokenUpdates[b.user_id]??prev)+Number(b.amount);
+        reportRows.push({username:umap2[b.user_id]?.username||b.user_id,choice:b.choice,bet:Number(b.amount),delta:0});
+      }
+      await audit('question_refunded',{question:question.text,totalRefunded:grand});
+    } else {
+      await upd('questions',{id:qId},{resolved:true,winner,resolution_comment:comment||null});
+      qBets.filter(b=>b.choice===winner).forEach(b=>{
+        const earn=wt>0?lt*(Number(b.amount)/wt):0;
+        const prev=Number(umap2[b.user_id]?.tokens||0);
+        tokenUpdates[b.user_id]=(tokenUpdates[b.user_id]??prev)+Number(b.amount)+earn;
+        reportRows.push({username:umap2[b.user_id]?.username||b.user_id,choice:winner,bet:Number(b.amount),delta:Math.round(earn*100)/100});
+      });
+      qBets.filter(b=>b.choice!==winner).forEach(b=>{
+        reportRows.push({username:umap2[b.user_id]?.username||b.user_id,choice:b.choice,bet:Number(b.amount),delta:-Number(b.amount)});
+      });
+      await audit('question_resolved',{question:question.text,winner,comment});
+    }
+    for(const [uid2,tokens] of Object.entries(tokenUpdates)) {
+      await upd('users',{id:uid2},{tokens:Math.round(tokens*100)/100});
+    }
+    await ins('reports',{id:'rep'+uid(),question:question.text,winner:lt===0||wt===0?null:winner,refunded:lt===0||wt===0,total_pool:grand,total_losing_pool:lt,comment:comment||null,rows:reportRows});
+    await refreshTokens(); renderAdmin(); if(currentTab==='questions') renderQuestions();
+  } catch(e) { alert('Resolve error: '+e.message); }
+}
+
+async function adminRefund(qId) {
+  try {
+    const [question,qBets,users2]=await Promise.all([
+      q1('questions',{id:qId}),
+      sb.from('bets').select('*').eq('question_id',qId).then(r=>r.data||[]),
+      q('users')
+    ]);
+    if(!question||question.resolved) return;
+    const comment=(document.getElementById('rc-'+qId)?.value||'').trim();
+    const umap2={}; users2.forEach(u=>{umap2[u.id]=u;});
+    const {grand}=poolStats(qBets,question.choices);
+    const tokenUpdates={}, reportRows=[];
+    await upd('questions',{id:qId},{resolved:true,refunded:true,resolution_comment:comment||null});
+    for(const b of qBets) {
+      const prev=Number(umap2[b.user_id]?.tokens||0);
+      tokenUpdates[b.user_id]=(tokenUpdates[b.user_id]??prev)+Number(b.amount);
+      reportRows.push({username:umap2[b.user_id]?.username||b.user_id,choice:b.choice,bet:Number(b.amount),delta:0});
+    }
+    for(const [uid2,tokens] of Object.entries(tokenUpdates)) {
+      await upd('users',{id:uid2},{tokens:Math.round(tokens*100)/100});
+    }
+    await ins('reports',{id:'rep'+uid(),question:question.text,winner:null,refunded:true,total_pool:grand,total_losing_pool:0,comment:comment||null,rows:reportRows});
+    await audit('question_refunded',{question:question.text,totalRefunded:grand});
+    await refreshTokens(); renderAdmin(); if(currentTab==='questions') renderQuestions();
+  } catch(e) { alert('Refund error: '+e.message); }
+}
+
+async function adminReset() {
+  const tokenAmt=parseFloat(document.getElementById('reset-tokens')?.value||100);
+  if(isNaN(tokenAmt)||tokenAmt<1) { alert('Enter a valid token amount.'); return; }
+  if(!confirm(`Reset the pool?\n\nDeletes all questions, bets, and reports.\nSets everyone's tokens to ${tokenAmt}.\nAccounts are kept.\n\nThis cannot be undone.`)) return;
+  try {
+    const users2=await q('users');
+    // Delete all rows from these tables
+    await sb.from('reports').delete().gte('id','');
+    await sb.from('bets').delete().gte('id','');
+    await sb.from('questions').delete().gte('id','');
+    for(const u of users2) await upd('users',{id:u.id},{tokens:tokenAmt});
+    await audit('pool_reset',{tokens:tokenAmt});
+    renderAdmin(); if(currentTab==='questions') renderQuestions();
+  } catch(e) { alert('Reset error: '+e.message); }
+}
+
+async function genInvite() {
+  const code=Math.random().toString(36).slice(2,8).toUpperCase();
+  try { await ins('invites',{code,used:false}); await audit('invite_generated',{code}); renderAdmin(); }
+  catch(e) { alert('Error: '+e.message); }
+}
+
+async function revokeInvite(code) {
+  try { await upd('invites',{code},{used:true}); await audit('invite_revoked',{code}); renderAdmin(); }
+  catch(e) { alert('Error: '+e.message); }
+}
+
+async function toggleAdmin(uid2, grant) {
+  try {
+    const target=await q1('users',{id:uid2});
+    await upd('users',{id:uid2},{is_admin:grant});
+    await audit('admin_changed',{target:target?.username,granted:grant});
+    renderAdmin();
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+function copyLink(code) {
+  const link=`${window.location.origin}${window.location.pathname}#invite=${code}`;
+  navigator.clipboard.writeText(link).then(()=>{
+    const out=document.getElementById('inv-out');
+    if(out) { out.innerHTML=`<div class="alert alert-success mt-sm" style="word-break:break-all">Copied!<br><span class="mono small">${link}</span></div>`; setTimeout(()=>{if(out)out.innerHTML='';},6000); }
+  }).catch(()=>{
+    const out=document.getElementById('inv-out');
+    if(out) out.innerHTML=`<div class="alert alert-info mt-sm" style="word-break:break-all">Share this link:<br><span class="mono small">${window.location.origin}${window.location.pathname}#invite=${code}</span></div>`;
+  });
+}
+
+// ─── Init ─────────────────────────────────────────
+async function init() {
+  checkInviteHash();
+  try {
+    const sess=loadSession();
+    if(sess?.userId) {
+      const [meta,user]=await Promise.all([q1('pool_meta',{}),q1('users',{id:sess.userId})]);
+      if(meta&&user) {
+        S={userId:user.id,username:user.username,isAdmin:user.is_admin,poolName:meta.name};
+        document.getElementById('loading-screen').style.display='none';
+        await enterApp(); return;
+      }
+    }
+    const meta=await q1('pool_meta',{});
+    if(meta) showAuthTab('login');
+  } catch(e) { console.warn('Init error:',e); }
+  document.getElementById('loading-screen').style.display='none';
+  showPage('page-welcome');
+}
+
+init();
+</script>
+</body>
+</html>
